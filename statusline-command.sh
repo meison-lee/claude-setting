@@ -31,15 +31,57 @@ pct_color() {
   else printf '%s' "$GRN"; fi
 }
 
+# progress bar for a percentage: $1 = percentage, $2 = yellow threshold, $3 = red
+# threshold. Filled part is colored by pct_color, the remaining track is dim.
+# Sub-cell precision comes from the eighth-block characters.
+BAR_CELLS=8
+bar() {
+  p=$(printf '%.0f' "$1")
+  [ "$p" -lt 0 ] && p=0
+  [ "$p" -gt 100 ] && p=100
+
+  eighths=$((p * BAR_CELLS * 8 / 100))
+  full=$((eighths / 8))
+  rem=$((eighths % 8))
+
+  filled=""
+  i=0
+  while [ "$i" -lt "$full" ]; do
+    filled="${filled}█"
+    i=$((i + 1))
+  done
+  if [ "$rem" -gt 0 ] && [ "$full" -lt "$BAR_CELLS" ]; then
+    case "$rem" in
+      1) filled="${filled}▏" ;;
+      2) filled="${filled}▎" ;;
+      3) filled="${filled}▍" ;;
+      4) filled="${filled}▌" ;;
+      5) filled="${filled}▋" ;;
+      6) filled="${filled}▊" ;;
+      7) filled="${filled}▉" ;;
+    esac
+    full=$((full + 1))
+  fi
+
+  track=""
+  i="$full"
+  while [ "$i" -lt "$BAR_CELLS" ]; do
+    track="${track}░"
+    i=$((i + 1))
+  done
+
+  printf '%s%s%s%s%s%s' "$(pct_color "$p" "$2" "$3")" "$filled" "$RST" "$DIM" "$track" "$RST"
+}
+
 out="${BOLD}${CYAN}${dir}${RST}"
 [ -n "$branch" ] && out="${out} ${MAG}${branch}${RST}"
 out="${out}${SEP}${DIM}${model}${RST}"
-[ -n "$used" ] && out="${out}${SEP}${DIM}ctx${RST} $(pct_color "$used" 60 85)$(printf '%.0f' "$used")%${RST}"
+[ -n "$used" ] && out="${out}${SEP}${DIM}ctx${RST} $(bar "$used" 60 85)"
 [ -n "$cost" ] && out="${out}${SEP}${DIM}\$$(printf '%.2f' "$cost")${RST}"
 if [ -n "$u5" ] || [ -n "$u7" ]; then
   out="${out}${SEP}"
-  [ -n "$u5" ] && out="${out}${DIM}5h${RST} $(pct_color "$u5" 70 90)$(printf '%.0f' "$u5")%${RST}"
+  [ -n "$u5" ] && out="${out}${DIM}5h${RST} $(bar "$u5" 70 90)"
   [ -n "$u5" ] && [ -n "$u7" ] && out="${out}  "
-  [ -n "$u7" ] && out="${out}${DIM}7d${RST} $(pct_color "$u7" 70 90)$(printf '%.0f' "$u7")%${RST}"
+  [ -n "$u7" ] && out="${out}${DIM}7d${RST} $(bar "$u7" 70 90)"
 fi
 printf '%s' "$out"
