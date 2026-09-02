@@ -7,6 +7,10 @@ used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
 u5=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
 u7=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty')
+# resets_at is a Unix epoch in seconds.
+r5=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
+r7=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+now=$(date +%s)
 
 # Git branch, if cwd is inside a git repo; blank (no error output) otherwise.
 # --no-optional-locks avoids contending with concurrent git operations.
@@ -73,6 +77,16 @@ bar() {
   printf '%s%s%s%s%s%s' "$(pct_color "$p" "$2" "$3")" "$filled" "$RST" "$DIM" "$track" "$RST"
 }
 
+# compact time left until the Unix epoch $1: 2d3h / 2h5m / 45m / <1m
+countdown() {
+  d=$((${1%%.*} - now))
+  [ "$d" -lt 0 ] && d=0
+  if [ "$d" -ge 86400 ]; then printf '%dd%dh' "$((d / 86400))" "$((d % 86400 / 3600))"
+  elif [ "$d" -ge 3600 ]; then printf '%dh%dm' "$((d / 3600))" "$((d % 3600 / 60))"
+  elif [ "$d" -ge 60 ]; then printf '%dm' "$((d / 60))"
+  else printf '<1m'; fi
+}
+
 out="${BOLD}${CYAN}${dir}${RST}"
 [ -n "$branch" ] && out="${out} ${MAG}${branch}${RST}"
 out="${out}${SEP}${DIM}${model}${RST}"
@@ -80,8 +94,14 @@ out="${out}${SEP}${DIM}${model}${RST}"
 [ -n "$cost" ] && out="${out}${SEP}${DIM}\$$(printf '%.2f' "$cost")${RST}"
 if [ -n "$u5" ] || [ -n "$u7" ]; then
   out="${out}${SEP}"
-  [ -n "$u5" ] && out="${out}${DIM}5h${RST} $(bar "$u5" 70 90)"
+  if [ -n "$u5" ]; then
+    out="${out}${DIM}5h${RST} $(bar "$u5" 70 90)"
+    [ -n "$r5" ] && out="${out} ${DIM}$(countdown "$r5")${RST}"
+  fi
   [ -n "$u5" ] && [ -n "$u7" ] && out="${out}  "
-  [ -n "$u7" ] && out="${out}${DIM}7d${RST} $(bar "$u7" 70 90)"
+  if [ -n "$u7" ]; then
+    out="${out}${DIM}7d${RST} $(bar "$u7" 70 90)"
+    [ -n "$r7" ] && out="${out} ${DIM}$(countdown "$r7")${RST}"
+  fi
 fi
 printf '%s' "$out"
