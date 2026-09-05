@@ -79,6 +79,18 @@ python3 ~/.claude/skills/risk-marks/prepare_unlock.py \
 以及環境（PROD？）攤給使用者，等明確同意再跑。openID 型別的標記要不要一起刪，
 **一定要問**，不要自己決定。
 
+**送出前先把「現在誰有標記」查下來存檔**——API 刪完不留稽核軌跡（見下方稽核軌跡一節），
+沒先查就永遠問不出 `sent > deleted` 差在哪幾筆：
+
+```sql
+SELECT u.open_id, urm.id AS mark_id
+FROM users u
+JOIN user_risk_marks urm
+  ON (urm.open_id = u.open_id)
+  OR (urm.country_code = u.country_code AND urm.phone = u.phone)
+WHERE u.open_id IN ( /* 這次的 targets */ );
+```
+
 ### Step 3 — 執行並留檔
 
 ```bash
@@ -162,12 +174,32 @@ WHERE u.open_id IN ('...', '...');
 
 | 批次 | 匯入的識別項 | 現況 |
 |---|---|---|
-| 第一批 GAMAPASS-3531 | openID（16973）＋手機 | **手機標記已於 2026-08-28 整批刪除；openID 標記仍在** |
+| 第一批 GAMAPASS-3531 | openID（16973）＋手機 | 手機標記已於 2026-08-28 整批刪除；**openID 標記狀態存疑，動手前必查** |
 | 第二批 GAMAPASS-3589 | 手機（44203） | 仍在。線上現存的手機標記都來自這批 |
 
 第一批手機標記已被清掉的證據：第二批 import log 結尾是
 `44203 sent, 44203 inserted, 0 duplicated`。兩批手機重疊很大，
 若第一批的列還在，這裡會出現大量 `duplicated`。
+
+**openID 標記不要照舊假設它還在。** `migrations/20260902124138_backfill_user_risk_mark_records.sql`
+的註解寫著「PROD 現有的列全是 phone 型（open_id 與 base_email 各 0 筆）」。
+`prepare_unlock.py` 只是比對歷史匯入清單，說「當初有匯入」，不等於「現在還在」。
+每次都先查：
+
+```sql
+SELECT count(*) FROM user_risk_marks WHERE open_id IS NOT NULL;
+```
+
+### 稽核軌跡（找得回／找不回什麼）
+
+`user_risk_mark_records` 是 append-only 的 ledger（`count_delta` ±1），
+2026-09-02 從當時的 `user_risk_marks` 全量回填過一次。**但只有後台 job 路徑會寫它**
+（`internal/service/user_risk_mark_job.go`）——**admin API 的 import/delete 不寫**，
+也不寫 `operation_records`。
+
+所以：API 刪掉一筆之後，**沒有任何地方記得那筆刪的是誰**。
+`sent > deleted` 想事後回推是哪幾筆，只能靠刪之前的查詢結果。
+**要留這個資訊，就得在送 DELETE 之前先把命中狀況查下來存檔。**
 
 **有新批次時**：把對照表放進 `data/`，在 `prepare_unlock.py` 的 `MAPPINGS`
 加一列；若該批是用 openID 匯入的，同時加進 `OPENID_MARK_LISTS`。
