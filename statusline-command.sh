@@ -3,6 +3,8 @@ input=$(cat)
 cwd=$(echo "$input" | jq -r '.cwd')
 dir=$(basename "$cwd")
 model=$(echo "$input" | jq -r '.model.display_name')
+# Reasoning effort level (low/medium/high/xhigh/max); absent for models without it.
+effort=$(echo "$input" | jq -r '.effort.level // empty')
 used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
 u5=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty')
@@ -90,6 +92,7 @@ countdown() {
 out="${BOLD}${CYAN}${dir}${RST}"
 [ -n "$branch" ] && out="${out} ${MAG}${branch}${RST}"
 out="${out}${SEP}${DIM}${model}${RST}"
+[ -n "$effort" ] && out="${out}${DIM}·${effort}${RST}"
 [ -n "$used" ] && out="${out}${SEP}${DIM}ctx${RST} $(bar "$used" 60 85)"
 [ -n "$cost" ] && out="${out}${SEP}${DIM}\$$(printf '%.2f' "$cost")${RST}"
 if [ -n "$u5" ] || [ -n "$u7" ]; then
