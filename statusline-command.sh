@@ -3,6 +3,8 @@ input=$(cat)
 cwd=$(echo "$input" | jq -r '.cwd')
 dir=$(basename "$cwd")
 model=$(echo "$input" | jq -r '.model.display_name')
+# Session name set by /rename (or --name); shown on its own line below.
+name=$(echo "$input" | jq -r '.session_name // empty')
 # Reasoning effort level (low/medium/high/xhigh/max); absent for models without it.
 effort=$(echo "$input" | jq -r '.effort.level // empty')
 used=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
@@ -107,4 +109,6 @@ if [ -n "$u5" ] || [ -n "$u7" ]; then
     [ -n "$r7" ] && out="${out} ${DIM}$(countdown "$r7")${RST}"
   fi
 fi
+[ -n "$name" ] && out="${out}
+${BOLD}${YEL}▸ ${name}${RST}"
 printf '%s' "$out"
