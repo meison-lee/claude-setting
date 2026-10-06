@@ -30,6 +30,10 @@ GRN="${ESC}[32m"
 YEL="${ESC}[33m"
 RED="${ESC}[31m"
 SEP="  ${DIM}|${RST}  "
+# Session-name title bar (truecolor): a darker "✦ SESSION" label segment in soft gold,
+# then the name in cream on muted violet.
+TITLE_LABEL="${ESC}[48;2;58;51;94m${ESC}[1;38;2;232;196;130m"
+TITLE="${ESC}[48;2;94;84;142m${ESC}[1;38;2;245;235;220m"
 
 # green below $2, yellow from $2, red from $3
 pct_color() {
@@ -109,6 +113,7 @@ if [ -n "$u5" ] || [ -n "$u7" ]; then
     [ -n "$r7" ] && out="${out} ${DIM}$(countdown "$r7")${RST}"
   fi
 fi
-[ -n "$name" ] && out="${out}
-${BOLD}${YEL}▸ ${name}${RST}"
+# Title goes on top so the info line reads as its body.
+[ -n "$name" ] && out="${TITLE_LABEL} ✦ SESSION ${TITLE} ${name} ${RST}
+${out}"
 printf '%s' "$out"
