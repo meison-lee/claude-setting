@@ -4,6 +4,7 @@
 Usage:
     python3 build_ticket.py ticket.json --dry-run   # render preview, touch nothing
     python3 build_ticket.py ticket.json             # create (no "ticket" key) or update (has "ticket")
+    python3 build_ticket.py bug.json --overwrite    # bug-fields mode: replace a non-empty Root Cause / Solution
 
 Env: JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN
 
@@ -20,6 +21,17 @@ Ticket JSON schema
   "implementation": [<block>, ...],  // 【實作方式】 required
   "impact":         [<block>, ...]   // 【影響範圍】 required
 }
+
+Bug-fields mode (a Bug's Root Cause / Solution, never the description)
+----------------------------------------------------------------------
+{
+  "ticket":     "GAMAPASS-1234",   // required
+  "root_cause": [<block>, ...],    // customfield_10286 "Root Cause"
+  "solution":   [<block>, ...]     // customfield_10283 "Solution"
+}
+Either key alone is fine. The four description sections must be absent: this mode PUTs
+only these two fields, so the reporter's description is left exactly as it was. A field
+that already holds text is refused unless --overwrite is passed.
 
 <block> is one of:
   {"p":  "段落文字"}                        paragraph
@@ -53,6 +65,11 @@ SECTIONS = [
     ("pending", "【待確認事項】"),
     ("implementation", "【實作方式】"),
     ("impact", "【影響範圍】"),
+]
+
+BUG_FIELDS = [
+    ("root_cause", "customfield_10286", "Root Cause"),
+    ("solution", "customfield_10283", "Solution"),
 ]
 
 _lid = [0]
@@ -217,7 +234,7 @@ def build_doc(spec):
 
 # ---------------------------------------------------------------- preview
 
-def preview(spec, doc):
+def preview(spec, doc, header=True):
     def flat(n):
         if n.get("type") == "text":
             t = n["text"]
@@ -231,7 +248,9 @@ def preview(spec, doc):
             return t
         return "".join(flat(c) for c in n.get("content", []) or [])
 
-    if spec.get("ticket"):
+    if not header:
+        pass
+    elif spec.get("ticket"):
         print("UPDATE %s (description will be OVERWRITTEN)" % spec["ticket"])
     else:
         print("CREATE %s / %s" % (spec.get("project", "GAMAPASS"),
@@ -323,6 +342,39 @@ def call(method, path, auth, base, body=None):
         raise SystemExit(1)
 
 
+def run_bug_fields(spec, dry, overwrite):
+    if not spec.get("ticket"):
+        raise SystemExit("bug-fields mode requires \"ticket\"")
+    mixed = [k for k, _ in SECTIONS if spec.get(k)]
+    if mixed:
+        raise SystemExit("bug-fields mode never writes the description; remove: %s"
+                         % ", ".join(mixed))
+
+    docs = {}
+    for key, field_id, label in BUG_FIELDS:
+        if spec.get(key):
+            docs[field_id] = {"type": "doc", "version": 1,
+                              "content": [block(b) for b in spec[key]]}
+            print("\n## %s (%s)" % (label, field_id))
+            preview(spec, docs[field_id], header=False)
+    print("UPDATE %s — only %s; description untouched"
+          % (spec["ticket"], ", ".join(docs)))
+    if dry:
+        print("dry run — nothing sent")
+        return
+
+    base, auth = env()
+    path = "/rest/api/3/issue/" + spec["ticket"]
+    current = call("GET", path + "?fields=" + ",".join(docs), auth, base)["fields"]
+    filled = [f for f in docs if current.get(f)]
+    if filled and not overwrite:
+        raise SystemExit("already filled: %s — read it, then rerun with --overwrite "
+                         "to replace it" % ", ".join(filled))
+    call("PUT", path, auth, base, {"fields": docs})
+    print("UPDATED:", spec["ticket"])
+    print("URL:", base + "/browse/" + spec["ticket"])
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     dry = "--dry-run" in sys.argv
@@ -331,6 +383,10 @@ def main():
 
     with open(args[0], encoding="utf-8") as f:
         spec = json.load(f)
+
+    if any(spec.get(k) for k, _, _ in BUG_FIELDS):
+        run_bug_fields(spec, dry, "--overwrite" in sys.argv)
+        return
 
     missing = [k for k in ("background", "implementation", "impact")
                if not spec.get(k)]

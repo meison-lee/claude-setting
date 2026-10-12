@@ -1,6 +1,6 @@
 ---
 name: jira
-description: Use when reading a Jira ticket by key (requirements, AC, comments), or when creating a new ticket / rewriting a ticket description for the GAMAPASS project
+description: Use when reading a Jira ticket by key (requirements, AC, comments), when creating a new ticket / rewriting a ticket description, or when filling a Bug's Root Cause / Solution after its fix, for the GAMAPASS project
 allowed-tools: Bash, Write, Read, WebFetch
 ---
 
@@ -12,8 +12,9 @@ allowed-tools: Bash, Write, Read, WebFetch
 with `source ~/.zshrc >/dev/null 2>&1;`. Project key: `GAMAPASS`. Default issue
 type: `Task`.
 
-Two jobs: **read a ticket** (below) and **write a ticket** (the house structure —
-that section is the contract, not a suggestion).
+Three jobs: **read a ticket** (below), **write a ticket** (the house structure —
+that section is the contract, not a suggestion), and **close out a Bug** by filling its
+Root Cause / Solution.
 
 ---
 
@@ -142,6 +143,61 @@ a comparison); prose and bullets remain the default for a decision aid.
     {"p": "僅影響 gama-auth 的每日 cronjob,不影響線上 API。"}
   ]
 }
+```
+
+## Closing out a Bug — Root Cause / Solution
+
+Every Bug ticket you fix ends with its **Root Cause** (`customfield_10286`) and
+**Solution** (`customfield_10283`) filled, once the fix MR is open. Done when both
+fields read back filled and the description is byte-for-byte what it was.
+
+**The description belongs to the reporter** — usually QA or PM opened the ticket. These
+two fields are where the engineer's account goes. `build_ticket.py`'s bug-fields mode
+PUTs only them, refuses a spec that also carries description sections, and refuses to
+replace a filled field unless you pass `--overwrite` (read what is there first).
+
+```json
+{
+  "ticket": "GAMAPASS-3797",
+  "root_cause": [<block>, ...],
+  "solution":   [<block>, ...]
+}
+```
+
+Dry-run, read the preview, send — same as the description workflow.
+
+### Write for QA
+
+The readers are QA and PM: they use these fields to understand what went wrong, to
+decide what to retest, and to explain it to others. Write the way you would explain it
+to a QA colleague at their desk — screens, buttons, what the user sees, in 繁體中文.
+
+- **Root Cause** — two short paragraphs or bullets:
+  - 現象：what QA saw, in screen terms.
+  - 原因：why, in product terms. Name a technical term only when it is the actual
+    cause, and then say what it means in one clause.
+- **Solution** — bullets:
+  - 修正內容：what behaves differently now.
+  - 影響範圍：what else this touches, and what it deliberately does not.
+  - 驗證方式：steps QA can perform on screen or via the backstage, with the expected
+    result.
+  - the MR link (`gama-auth !973`) — that is where function names, SQL, file paths and
+    test names live.
+
+Example (GAMAPASS-3797):
+
+```
+Root Cause
+- 現象：後台「條款管理」的四個頁籤順序與規格不同，「帳號刪除暨服務終止同意書」排在第一個。
+- 原因：頁籤順序由後端決定，而後端當初沒有替條款設定顯示順序，系統就依條款的英文代號
+  按字母排序（account_deletion 開頭是 a），排成「帳號刪除 → 個人化行銷 → 隱私權 → 會員服務」。
+
+Solution
+- 修正內容：後端替每種條款加上固定的顯示順序，依 QA 規格（GAMAPASS-1293 US01）排列：
+  隱私權政策 → 會員服務條款 → 個人化行銷優惠授權 → 帳號刪除暨服務終止同意書。
+- 影響範圍：只影響後台條款管理的頁籤順序；前台、官網與各條款的內容、版本都不受影響，前端不需修改。
+- 驗證方式：進入後台「基礎設定管理 > 條款管理」，頁籤由左到右應為上述順序，點各頁籤內容正確。
+- 修正 MR：gama-auth !973
 ```
 
 ## Common mistakes
