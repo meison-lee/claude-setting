@@ -48,10 +48,15 @@ Run from the MR's repo checkout (its `.env` holds the webhook and the `GCHAT_USE
 
 ```
 python3 -I ~/.claude/skills/respond-to-review/scripts/gchat_mention.py --mr <iid> --user <gitlab username> \
-  --text "<repo> !<iid> 的 review 已逐點回覆…：<note link>"
+  --note <step-4 note url> \
+  --point "<reviewer's heading>::<fixed + commit, or why it stays>" \
+  --point "..."
 ```
 
-It is a dry run until `--send`. Read its `tag` line, then apply the **identity check** below; send only when sure.
+It posts the mention alone as text plus a card (header `Review reply — <repo>`, one bold-labelled paragraph per
+`--point`, `Open reply` / `Open MR` buttons), in the reviewer's language, one `--point` per point of step 4 in the
+same order. It is a dry run until `--send`. Read its `tag` line, then apply the **identity check** below; send only
+when sure.
 A Chat post cannot be recalled: on a send failure, look at the thread before any second attempt.
 
 ### 6. Watch (optional)

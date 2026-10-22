@@ -2,8 +2,14 @@
 """Tag one GitLab user in an MR's Google Chat thread.
 
 Usage (run from the MR's repo checkout, whose .env holds the webhook and GCHAT_USER_* lines):
-  gchat_mention.py --mr 483 --user reverchen --text "gama-api-gateway !483 的 review 已逐點回覆：<link>"           # dry run
-  gchat_mention.py --mr 483 --user reverchen --text "..." --send
+  gchat_mention.py --mr 483 --user reverchen --note <gitlab note url> \
+      --point "atlas.sum 衝突::已 merge origin/main 並重新 hash，commit e27ffd9c" \
+      --point "init.sql 註解::改為只講 open_id／base_email"                       # dry run
+  ... --send
+
+The message is the mention alone in `text` (a card cannot render <users/...>) plus a cardsV2 card in the style of
+notify-mr.sh: header "Review reply — <repo>" / "MR !<iid> · <ticket>", one bold-labelled paragraph per --point,
+and "Open reply" / "Open MR" buttons.
 
 Resolution, all of which must hold or nothing is sent:
   - .env maps GCHAT_USER_<user> to users/<digits>, and no other username maps to the same ID
@@ -60,11 +66,32 @@ def project_path():
     return m.group(1)
 
 
+def esc(text):
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def build_payload(chat_id, repo, iid, ticket, mr_url, note_url, points):
+    """`text` carries only the mention (it is what notifies the user); everything readable is in the card."""
+    paragraphs = [f"<b>{esc(label)}</b><br/>{esc(text)}" for label, text in points]
+    card = {
+        "header": {"title": f"Review reply — {repo}", "subtitle": f"MR !{iid}" + (f" · {ticket}" if ticket else "")},
+        "sections": [
+            {"widgets": [{"textParagraph": {"text": "<br/><br/>".join(paragraphs)}}]},
+            {"widgets": [{"buttonList": {"buttons": [
+                {"text": "Open reply", "onClick": {"openLink": {"url": note_url}}},
+                {"text": "Open MR", "onClick": {"openLink": {"url": mr_url}}}]}}]},
+        ],
+    }
+    return {"text": f"<{chat_id}>", "cardsV2": [{"cardId": "review-reply", "card": card}]}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mr", required=True, help="MR IID in this checkout's project")
     ap.add_argument("--user", required=True, help="GitLab username to tag (the comment author)")
-    ap.add_argument("--text", required=True, help="message after the mention; include the GitLab note link")
+    ap.add_argument("--note", required=True, help="URL of the reply note on the MR (the Open reply button)")
+    ap.add_argument("--point", action="append", required=True, metavar="LABEL::BODY",
+                    help="one review point: the reviewer's heading, '::', then what happened (repeatable, in order)")
     ap.add_argument("--send", action="store_true", help="post it; without this only the resolution is printed")
     args = ap.parse_args()
 
@@ -105,16 +132,28 @@ def main():
     if not hook_space or not thread.startswith(hook_space.group(0) + "/"):
         fail(2, f"thread {thread} is not in the webhook's space; wrong checkout?")
 
-    message = f"<{chat_id}> {args.text}"
+    points = []
+    for raw_point in args.point:
+        label, sep, text = raw_point.partition("::")
+        if not sep or not label.strip() or not text.strip():
+            fail(2, f"--point needs LABEL::BODY, got {raw_point!r}")
+        points.append((label.strip(), text.strip()))
+    ticket = re.search(r"[A-Z]+-\d+", mr.get("source_branch", "") + " " + mr.get("title", ""))
+    payload = build_payload(chat_id, project.rsplit("/", 1)[-1], args.mr, ticket.group(0) if ticket else "",
+                            mr.get("web_url", ""), args.note, points)
+    payload["thread"] = {"name": thread}
     print(f"project  : {project} !{args.mr} ({mr.get('title', '')[:60]})")
     print(f"thread   : {thread}")
     print(f"tag      : {args.user} ({gl_name}) -> {chat_id}")
-    print(f"message  : {message}")
+    print(f"card     : {payload['cardsV2'][0]['card']['header']['title']} / "
+          f"{payload['cardsV2'][0]['card']['header']['subtitle']}")
+    for label, text in points:
+        print(f"  - {label}: {text}")
     if not args.send:
         print("dry run: nothing sent")
         return
 
-    body = json.dumps({"text": message, "thread": {"name": thread}}).encode()
+    body = json.dumps(payload).encode()
     req = urllib.request.Request(webhook + "&messageReplyOption=REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD", data=body,
                                  headers={"Content-Type": "application/json; charset=UTF-8"})
     try:
