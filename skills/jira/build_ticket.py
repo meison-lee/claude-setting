@@ -39,7 +39,7 @@ that already holds text is refused unless --overwrite is passed.
   {"ul": ["項目", ...]}                     bullet list
   {"ol": ["步驟", ...]}                     numbered list
   {"code": "SELECT 1;", "lang": "sql"}      code block (lang default "text")
-  {"tasks": ["待辦", ...]}                  checklist (Jira taskList)
+  {"tasks": ["待辦", "[x] 已完成", ...]}     checklist (Jira taskList); "[x] " prefix = checked
   {"table": {"headers": ["A", "B"],         table; "headers" optional (renders a
              "rows": [["a1", "b1"], ...]}}     header row). A cell is a string, or a
                                                list of strings for multi-line cells.
@@ -135,15 +135,16 @@ def code_block(text, lang="text"):
 
 
 def task_list(items):
+    # an item written "[x] 文字" is a checked (DONE) item; everything else is TODO
+    def item(i):
+        done = i.startswith("[x] ")
+        return {"type": "taskItem",
+                "attrs": {"localId": _next_lid(), "state": "DONE" if done else "TODO"},
+                "content": inline(i[4:] if done else i)}
     return {
         "type": "taskList",
         "attrs": {"localId": _next_lid()},
-        "content": [
-            {"type": "taskItem",
-             "attrs": {"localId": _next_lid(), "state": "TODO"},
-             "content": inline(i)}
-            for i in items
-        ],
+        "content": [item(i) for i in items],
     }
 
 
@@ -269,7 +270,8 @@ def preview(spec, doc, header=True):
                 print("  %s %s" % (mark, flat(item)))
         elif t == "taskList":
             for item in n["content"]:
-                print("  [ ] %s" % flat(item))
+                done = item["attrs"].get("state") == "DONE"
+                print("  [%s] %s" % ("x" if done else " ", flat(item)))
         elif t == "codeBlock":
             print("```%s\n%s\n```" % (n["attrs"].get("language", ""), flat(n)))
         elif t == "table":

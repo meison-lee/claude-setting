@@ -114,7 +114,7 @@ confirm with the user — PUT replaces it, and there is no undo.
 
 Inside each section, blocks are: `{"p":...}` paragraph, `{"h":...}` sub-heading,
 `{"ul":[...]}` / `{"ol":[...]}` lists, `{"code":..., "lang":...}` code block,
-`{"tasks":[...]}` checklist, `{"table": {"headers":[...], "rows":[[...]]}}` table
+`{"tasks":[...]}` checklist (prefix an item with `[x] ` to check it), `{"table": {"headers":[...], "rows":[[...]]}}` table
 (`headers` optional; a cell is a string or a list of strings), `{"panel":...,
 "type":"warning"}` callout (type ∈ info/note/success/warning/error), `{"quote":...}`
 blockquote, `{"rule": true}` divider. Inline `` `code` ``, `**bold**` and
