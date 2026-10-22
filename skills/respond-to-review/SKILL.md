@@ -6,7 +6,7 @@ description: Use when a reviewer has commented on our MR (GitLab, gama-* repos) 
 # Respond to review
 
 A review is answered when every point has a verdict (fixed, reply-only, or the user's call), the fixes are pushed, the
-reviewer has a point-by-point reply on their thread, and, when the user asked for it, the reviewer is tagged in Chat.
+reviewer has a point-by-point reply on their thread, and the reviewer is tagged in the MR's Chat thread.
 
 ## Steps
 
@@ -42,7 +42,7 @@ reviewer has a point-by-point reply on their thread, and, when the user asked fo
   their headings: each point gets fixed + commit hash + test name, or the reason it stays.
 - Done when the note is posted and its id is noted for step 5.
 
-### 5. Tag the reviewer in Chat (only when the user asked for it in this request)
+### 5. Tag the reviewer in Chat
 
 Run from the MR's repo checkout (its `.env` holds the webhook and the `GCHAT_USER_<gitlab username>` table):
 
